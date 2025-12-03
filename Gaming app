@@ -1,0 +1,400 @@
+import { motion, AnimatePresence } from 'framer-motion';
+import { Sparkles, X } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+
+interface AICompanionProps {
+  message: string;
+  isLoading: boolean;
+  onDismiss?: () => void;
+  compact?: boolean;
+}
+
+export function AICompanion({ message, isLoading, onDismiss, compact = false }: AICompanionProps) {
+  if (!message && !isLoading) return null;
+
+  return (
+    <AnimatePresence>
+      <motion.div
+        initial={{ opacity: 0, y: 20, scale: 0.95 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, y: -20, scale: 0.95 }}
+        transition={{ type: 'spring', damping: 20, stiffness: 300 }}
+        className={`
+          relative bg-gradient-to-br from-primary/20 via-card to-secondary/10 
+          border border-primary/30 rounded-2xl backdrop-blur-sm
+          ${compact ? 'p-3' : 'p-4'}
+        `}
+      >
+        {/* Glow effect */}
+        <div className="absolute inset-0 rounded-2xl bg-primary/5 blur-xl -z-10" />
+        
+        <div className="flex items-start gap-3">
+          {/* Avatar */}
+          <motion.div
+            animate={{ 
+              y: [0, -3, 0],
+              rotate: isLoading ? [0, 5, -5, 0] : 0 
+            }}
+            transition={{ 
+              y: { duration: 2, repeat: Infinity, ease: 'easeInOut' },
+              rotate: { duration: 0.5, repeat: isLoading ? Infinity : 0 }
+            }}
+            className={`
+              flex-shrink-0 rounded-full bg-gradient-to-br from-primary to-secondary 
+              flex items-center justify-center glow-primary
+              ${compact ? 'w-8 h-8' : 'w-10 h-10'}
+            `}
+          >
+            <Sparkles className={`text-primary-foreground ${compact ? 'w-4 h-4' : 'w-5 h-5'}`} />
+          </motion.div>
+
+          {/* Message */}
+          <div className="flex-1 min-w-0">
+            <div className={`flex items-center gap-2 ${compact ? 'mb-0.5' : 'mb-1'}`}>
+              <span className={`font-display font-bold text-primary ${compact ? 'text-xs' : 'text-sm'}`}>
+                Pixel
+              </span>
+              <span className={`text-muted-foreground ${compact ? 'text-[10px]' : 'text-xs'}`}>
+                AI Guide
+              </span>
+            </div>
+            
+            {isLoading ? (
+              <div className="flex gap-1">
+                {[0, 1, 2].map((i) => (
+                  <motion.div
+                    key={i}
+                    animate={{ opacity: [0.3, 1, 0.3] }}
+                    transition={{ duration: 1, repeat: Infinity, delay: i * 0.2 }}
+import { useState, useCallback } from 'react';
+import { supabase } from '@/integrations/supabase/client';
+
+interface CompanionContext {
+  playerName?: string;
+  level?: number;
+  streak?: number;
+  questsCompleted?: number;
+  questTitle?: string;
+  questDescription?: string;
+}
+
+export function useAICompanion() {
+  const [message, setMessage] = useState<string>('');
+  const [isLoading, setIsLoading] = useState(false);
+
+  const getCompanionMessage = useCallback(async (
+    type: 'welcome' | 'quest_start' | 'quest_complete' | 'encourage' | 'level_up',
+    context: CompanionContext = {}
+  ) => {
+    setIsLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('ai-companion', {
+        body: { type, ...context }
+      });
+
+      if (error) throw error;
+      
+      const newMessage = data?.message || getDefaultMessage(type);
+      setMessage(newMessage);
+      return newMessage;
+    } catch (error) {
+      console.error('AI companion error:', error);
+      const fallback = getDefaultMessage(type);
+      setMessage(fallback);
+      return fallback;
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  const clearMessage = useCallback(() => {
+    setMessage('');
+  }, []);
+
+  return { message, isLoading, getCompanionMessage, clearMessage };
+}
+
+function getDefaultMessage(type: string): string {
+  const defaults: Record<string, string> = {
+    welcome: "Welcome back, hero! Ready to conquer some quests today? 🌟",
+    quest_start: "You've got this! Let's make it happen! 💪",
+    quest_complete: "Amazing job! You're a superstar! ⭐",
+    encourage: "Every step counts! You're doing wonderful! 🌈",
+    level_up: "Wow! Level up! You're incredible! 🎉",
+  };
+  return defaults[type] || "You're doing great! Keep going! ✨";
+}
+import { Toaster } from "@/components/ui/toaster";
+import { Toaster as Sonner } from "@/components/ui/sonner";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { AuthProvider } from "@/hooks/useAuth";
+import Index from "./pages/Index";
+import Profile from "./pages/Profile";
+import NotFound from "./pages/NotFound";
+
+const queryClient = new QueryClient();
+
+const App = () => (
+  <QueryClientProvider client={queryClient}>
+    <AuthProvider>
+      <TooltipProvider>
+        <Toaster />
+        <Sonner />
+        <BrowserRouter>
+          <Routes>
+            <Route path="/" element={<Index />} />
+            <Route path="/profile" element={<Profile />} />
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </BrowserRouter>
+      </TooltipProvider>
+    </AuthProvider>
+  </QueryClientProvider>
+);
+
+export default App;
+import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import { User, Session } from '@supabase/supabase-js';
+import { supabase } from '@/integrations/supabase/client';
+
+interface AuthContextType {
+  user: User | null;
+  session: Session | null;
+  loading: boolean;
+  signOut: () => Promise<void>;
+}
+
+const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+export function AuthProvider({ children }: { children: ReactNode }) {
+  const [user, setUser] = useState<User | null>(null);
+  const [session, setSession] = useState<Session | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    // Set up auth state listener FIRST
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        setSession(session);
+        setUser(session?.user ?? null);
+        
+        // If no session, auto sign-in anonymously
+        if (!session && event === 'SIGNED_OUT') {
+          // Don't auto sign-in on explicit sign out
+        } else if (!session) {
+          await signInAnonymously();
+        } else {
+          setLoading(false);
+        }
+      }
+    );
+
+    // Check for existing session, if none, sign in anonymously
+    const initAuth = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        setSession(session);
+        setUser(session.user);
+        setLoading(false);
+      } else {
+        await signInAnonymously();
+      }
+    };
+
+    initAuth();
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const signInAnonymously = async () => {
+    try {
+      const { data, error } = await supabase.auth.signInAnonymously();
+      if (error) throw error;
+      setSession(data.session);
+      setUser(data.user);
+    } catch (error) {
+      console.error('Anonymous sign-in error:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const signOut = async () => {
+    await supabase.auth.signOut();
+    // Re-sign in anonymously after sign out
+    await signInAnonymously();
+  };
+
+  return (
+    <AuthContext.Provider value={{ user, session, loading, signOut }}>
+      {children}
+    </AuthContext.Provider>
+  );
+}
+
+export function useAuth() {
+  const context = useContext(AuthContext);
+  if (context === undefined) {
+    throw new Error('useAuth must be used within an AuthProvider');
+  }
+  return context;
+}import { useState, useCallback, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { motion } from 'framer-motion';
+import { Quest, QuestCategory } from '@/types/quest';
+import { useAuth } from '@/hooks/useAuth';
+import { useProfile, calculateLevel } from '@/hooks/useProfile';
+import { useUserQuests, usePhotoUpload } from '@/hooks/useQuests';
+import { useAICompanion } from '@/hooks/useAICompanion';
+import { UserStatsPanel } from '@/components/UserStatsPanel';
+import { CategoryFilter } from '@/components/CategoryFilter';
+import { QuestGrid } from '@/components/QuestGrid';
+import { QuestModal } from '@/components/QuestModal';
+import { XPPopup } from '@/components/XPPopup';
+import { LevelUpPopup } from '@/components/LevelUpPopup';
+import { AICompanion } from '@/components/AICompanion';
+import { Button } from '@/components/ui/button';
+import { Gamepad2, User } from 'lucide-react';
+import { toast } from '@/hooks/use-toast';
+
+const Index = () => {
+  const navigate = useNavigate();
+  const { user, loading: authLoading } = useAuth();
+  const { profile, isLoading: profileLoading, updateProfile } = useProfile();
+  const { quests, isLoading: questsLoading, completeQuest } = useUserQuests();
+  const { uploadPhoto } = usePhotoUpload();
+  const { message: companionMessage, isLoading: companionLoading, getCompanionMessage, clearMessage } = useAICompanion();
+
+  const [selectedCategory, setSelectedCategory] = useState<QuestCategory | 'all'>('all');
+  const [selectedQuest, setSelectedQuest] = useState<Quest | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [showXPPopup, setShowXPPopup] = useState(false);
+  const [earnedXP, setEarnedXP] = useState(0);
+  const [showLevelUp, setShowLevelUp] = useState(false);
+  const [newLevel, setNewLevel] = useState(1);
+  const [isUploading, setIsUploading] = useState(false);
+  const [hasGreeted, setHasGreeted] = useState(false);
+
+  // Welcome message when user data loads
+  useEffect(() => {
+
+          <div className="mb-8">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm text-muted-foreground">Experience</span>
+              <span className="text-sm font-medium text-gold text-glow-gold">
+                {profile.current_xp} / {profile.xp_to_next_level} XP
+              </span>
+            </div>
+            <Progress value={xpProgress} variant="gold" className="h-4" />
+            <p className="text-xs text-muted-foreground mt-2 text-center">
+              {profile.xp_to_next_level - profile.current_xp} XP until Level {profile.level + 1}
+            </p>
+          </div>
+
+          {/* Stats Grid */}
+          <div className="grid grid-cols-2 gap-4">
+            <StatCard
+              icon={<Zap className="w-6 h-6" />}
+              value={profile.total_xp}
+              label="Total XP"
+              color="gold"
+            />
+            <StatCard
+              icon={<Trophy className="w-6 h-6" />}
+              value={profile.quests_completed}
+              label="Quests Done"
+              color="success"
+            />
+            <StatCard
+              icon={<Flame className="w-6 h-6" />}
+              value={profile.streak}
+              label="Day Streak"
+              color="secondary"
+            />
+            <StatCard
+              icon={<Target className="w-6 h-6" />}
+              value={profile.level}
+              label="Current Level"
+              color="primary"
+            />
+          </div>
+        </motion.div>
+
+        {/* Achievements Preview */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1 }}
+          className="rounded-2xl border border-border bg-card/50 backdrop-blur-sm p-6 cyber-border"
+        >
+          <h2 className="font-display text-xl font-bold text-foreground mb-4 flex items-center gap-2">
+            <Star className="w-5 h-5 text-gold" />
+            Achievements
+          </h2>
+          <div className="flex flex-wrap gap-3">
+            {profile.quests_completed >= 1 && (
+              <AchievementBadge emoji="🎯" title="First Quest" />
+            )}
+            {profile.quests_completed >= 10 && (
+              <AchievementBadge emoji="🔥" title="Quest Master" />
+            )}
+            {profile.level >= 2 && (
+              <AchievementBadge emoji="⬆️" title="Level Up" />
+            )}
+            {profile.streak >= 3 && (
+              <AchievementBadge emoji="📅" title="Consistent" />
+            )}
+            {profile.quests_completed === 0 && profile.level === 1 && (
+              <p className="text-muted-foreground text-sm">
+                Complete quests to unlock achievements!
+              </p>
+            )}
+          </div>
+        </motion.div>
+      </div>
+    </div>
+  );
+};
+
+function StatCard({ 
+  icon, 
+  value, 
+  label, 
+  color 
+}: { 
+  icon: React.ReactNode; 
+  value: number; 
+  label: string; 
+  color: 'primary' | 'secondary' | 'success' | 'gold' 
+}) {
+  const colorClasses = {
+    primary: 'text-primary bg-primary/10 border-primary/30',
+    secondary: 'text-secondary bg-secondary/10 border-secondary/30',
+    success: 'text-success bg-success/10 border-success/30',
+    gold: 'text-gold bg-gold/10 border-gold/30',
+  };
+
+  return (
+    <motion.div
+      whileHover={{ scale: 1.02 }}
+      className={`flex flex-col items-center p-4 rounded-xl border ${colorClasses[color]}`}
+    >
+      {icon}
+      <span className="font-display text-2xl font-bold mt-2">{value.toLocaleString()}</span>
+      <span className="text-xs text-muted-foreground">{label}</span>
+    </motion.div>
+  );
+}
+
+function AchievementBadge({ emoji, title }: { emoji: string; title: string }) {
+  return (
+    <div className="flex items-center gap-2 bg-gold/10 border border-gold/30 rounded-full px-3 py-1.5">
+      <span>{emoji}</span>
+      <span className="text-sm text-gold">{title}</span>
+    </div>
+  );
+}
+
+export default Profile;
